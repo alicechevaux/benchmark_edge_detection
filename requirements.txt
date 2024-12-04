@@ -1,3 +1,8 @@
 jupyter
 matplotlib
 numpy
+pandas as pd
+ast
+scikit-learn
+pickle
+os
