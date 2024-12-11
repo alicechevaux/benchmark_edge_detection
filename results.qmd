@@ -1,0 +1,304 @@
+---
+title: "Survey of Graph Edge Detection Models for fMRI Data: Covariance and Precision Based Methods with Relaxed Sparsity Assumptions"
+author:
+    - name: Alice Chevaux
+
+date: 03/12/2024
+date-modified: last-modified
+citeproc: true
+bibliography: references.bib
+format:
+  computo-html: default
+  computo-pdf: default
+jupyter: python3
+---
+
+```{python}
+import pandas as pd
+import ast
+import numpy as np
+import matplotlib.pyplot as plt
+import method_detection_edge as method
+from sklearn.covariance import GraphicalLasso
+from scipy.stats import multivariate_normal
+import seaborn as sns
+%matplotlib inline
+import importlib
+from scipy.stats import pearsonr
+import statsmodels.stats.multitest as smm
+# Après modification de mon_script.py, rechargez-le
+importlib.reload(method)
+from scipy.special import gamma
+import pickle
+import os
+from matplotlib.colors import LinearSegmentedColormap
+```
+
+# Introduction
+
+cite **Computo** (@computo) as [@computo]
+
+This aim of this paper is to present a survey of the differents existing methods to infer a binary graph for a single-subject from fMRI data. We particularly want to emphasize the impact of some strong underlying assumptions that are made sometimes about the degree of density of the graph or the intensity of the correlation.
+
+To apprehend this problem we focus on some arbitrary choices or hypothesis that are made when using this kind of methods :
+
+- First one must choose between working with the an estimator of the covariance matrix or of the precision matrix. These does not carry the same information and does not behave the same way; thus we want to present the impact of this choice on the results 
+
+- Then it is common to suppose that the graph that we want to infer is sparse. We believe that this may be a unrealistic setting, at least for fMRI data (ref à mettre). We are particularly interested in the robustness of the methods when this hypothesis is relaxed.
+
+- Finally, in edge-detection models, we focus on recovering an adjacency matrix, with 0 if we estim that the correlation is null, or 1 otherwise. We believe that in this case the method must be robust even if the intensity of correlation $\rho_{i,j}$ is low (for example below 0.3). Nonetheless some methods are using some parameters to choose at the beggining that may depend on this value. We will then compare the robustness of the methods depending on the mean values of the non-zeros coefficients.
+
+
+For this purpose we propose a set of correlation matrix generated with respect to several parameters : the number of nodes $n$ , the proportion of edges (or degree of density) $d$ and the mean values of the non-zero coefficient $b$. 
+
+# State of the art
+
+Much of this state of the art will be based on the article we mentioned at the beginning, but also some articles that are specialised in sparsity methods and not in the estimation of the correlation matrix. The articles added are mostly from a frequentist setting. %We focus on the methods proposed to transform an estimator of the correlation matrix into a sparse correlation matrix. 
+
+
+
+
+- Hard Thresholding : Apply an arbitrary threshold between 0 and 1 to the correlation estimator $\rho_{i,j}$. The choice of the threshold tends to make this method non-robust, in fact the optimal threshold varies depending on some unknown variable such as the sparsity of the graph or the values of $\rho_{i,j}$. This method is the most commonly used in practice because it is easy to interpret and compute. It is the main method in the toolboxes of neuroscientists like in @gretna. %We will use here some known thresholds like (Hero ? revoir biblio Hana)
+    
+- Proportional threshold: Apply a proportional threshold that guarantees the same proportion of edge for each graph estimated. This is used in practice to compare a group of patients with a group of controls. Some articles, such as @proportional, have warned practitioners about the risks of this method because the total functional connectivity activity become an information that is erased in this procedure. It is not an appropriate comparison for our method because it only works for a known degree of sparsity.
+    
+- Multiple t-test: Use a hypothesis test for each pair $(i,j)$ with $H_0^{i,j}: \rho_{i,j}=0$ and $H_1^{i,j}: \rho_{i,j} > 0$. Since we are in a case where we are using the same data for multiple tests, it is common to use a procedure to control the False Discovery Rate (FDR) or the Family-Wise Error Rate (FWER) at a given level $\alpha$, which we will set at $0.05$. In our case, we will prefer a control over the FDR, the most common correction then being the Benjamini-Hochberg procedure, which is easily computable. Some papers such as @cao have used a Bonferonni procedure, but @fdr has shown the advantages of Benjamini-Hochberg for this application.
+
+    
+- Graphical Lasso: This model gives us a sparse estimator for the precision matrix. Thus, the correlation matrix is not particularly sparse, so we will not use this method as a comparison for our model. Nevertheless, we know that it is a promising method, but its applications for fMRI data tend to be much more complicated with time-varying graphical models @glasso, which is not appropriate for the data we have here.
+
+
+Others methods exists yet we choosed not to include them for several reasons :
+Some methods seems promising like fused lasso yet they need the data of several individuals to choose the edges. Others like thresholding based on a mixture models assume that the negative coefficients are irrelevant, yet with our simulation we have negative coefficient that we want to detect, thus these are not usable in this study.
+
+# Methodology
+
+## Metrics
+Each methods presented before allow us to obtain a binary matrix $\hat{A}$, that we want to compare to a ground-truth binary matrix $A$. We will use metrics thhat are common to binary classification : this way each implementation give us the number of true positive (TP), true negative (TN), false positive (FP) and false negative (FP). To compare we will thus compute the average measure : $\frac{TP+TN}{TP+TN+FP+FN}$ that give us the proportion of elements that have been well estimated. We use this one since we do not want to do a difference between the errors from false negative or false positive. But if the objective of an application give us a different consideration of the type of error, it is easy to compute any metrics from binary classification (False Positive Rate, F1-score etc).
+
+## Comparison of precision- and covariance-based estimator 
+To be able to compare an estimator that estim the adjacency matrix of the precision matrix $\hat{A}^{p}$ and an estimator of the adjacency matrix of the covariance or correlation matrix $\hat{A}^{c}$, we will simulate data so that they both are both extract from the same adjacency matrix $A$ :
+
+If we have $\Sigma$ a definite positive matrix, it can be used both has a precision or as a covariance matrix. Let's say $A$ is the adjacency matrix of $\Sigma$ : 
+
+We simulate $Y^c \longrightarrow N(0,\Sigma)$ a vector of length n with T realisations that has a covariance matrix $\Sigma$
+
+We simulate $Y^p \longrightarrow N(0,\Sigma^{-1})$ a vector of length n with T realisations that has a precision matrix $\Sigma$ 
+
+This way when applying the estimator of the adjacency matrix of the covariance matrix to the first dataset $\hat{A}^{c}(Y^c)$, it will detect the edge of its covariance matrix $\Sigma$, we will thus be able to compare directly $\hat{A}^{c}(Y^c)$ to A.
+
+The same way, when applying the estimator of the adjacency matrix of the precision matrix to the second dataset $\hat{A}^{p}(Y^p)$, it will detect the edge of its precision matrix that is $(\Sigma^{-1})^{-1}=\Sigma$, we will thus be able to compare directly $\hat{A}^{p}(Y^p)$ to A.
+
+We this set-up of simulations and metrics with regards to the same matrix $\Sigma$ and $A$, we will be able to compare methods that estimate a sparse covariance matrix to these that estimate a sparse precision matrix.
+
+
+## Choices of the parameters
+
+# Simulation of data from a correlation matrix
+
+From a positive-definite matrix $\Sigma$, that respect an adjacency matrix A, we can simulate iid data $Y \longrightarrow N(0,\Sigma)$. We choose to work with differents numbers of observations $T \in \{10,50,500\}$. In this setting we will be able to see if the edge-detection methods for the covariance matrix are able to recover the adjacency matrix of $\Sigma$ A.
+
+To compare precision and covariance based methods we wimulate data from $\Sigma$ but also from $\Sigma^{-1}$ :
+
+$Y^c \longrightarrow N(0,\Sigma)$
+
+$Y^p \longrightarrow N(0,\Sigma^{-1})$
+
+
+
+For example in our set of data we can take a look at the first definite positive matrix $\Sigma$ and its adjacency matrix A :
+
+
+```{python}
+filepath="data/data_S0_T10.pkl"
+with open(filepath, "rb") as file:
+    data_dict = pickle.load(file)
+
+S = data_dict.get('graph')
+fig, axes = plt.subplots(1, 2, figsize=(7, 3), constrained_layout=True)
+
+# Heatmap 1
+sns.heatmap(S,cmap="bwr",vmin=-1,vmax=1, ax=axes[0], xticklabels=False, yticklabels=False)
+axes[0].set_title("Definite positive matrix Sigma")
+
+# Heatmap 2
+sns.heatmap(S!=0,cmap="bwr",vmin=-1,vmax=1,cbar=False, ax=axes[1], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
+axes[1].set_title("Adjacency matrix A")
+
+
+plt.show()
+```
+
+Using the usual estimators of the covariance matrix cov(Y), we can take a look at the estimation we get if we do not use specific edge-detection methods.
+
+We do the same with the data $Y^p$ with the estimator of the precision matrix : $prec(Y^p)=(cov(Y^p))^{-1}$
+
+We can now look at the empirical covariance matrix we get from cov(Y^c) and the empirical precision matrix prec(Y^p) for differents numbers of observations $T$.
+
+
+```{python }
+Y1 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S, size=10)
+Y2 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S, size=50)
+Y3 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S, size=100)
+
+S_1=np.linalg.inv(S)
+Y_1 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S_1, size=10)
+Y_2 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S_1, size=50)
+Y_3 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S_1, size=100)
+
+cov1, cov2, cov3 = np.cov(Y1.T), np.cov(Y2.T), np.cov(Y3.T)
+prec1 = np.linalg.inv(np.cov(Y_1.T))
+prec2=np.linalg.inv(np.cov(Y_2.T))
+prec3=np.linalg.inv(np.cov(Y_3.T))
+
+# Création de la figure et des sous-graphiques
+fig, axes = plt.subplots(2, 3, figsize=(11, 6), constrained_layout=True)
+
+
+
+# correlation matrix
+sns.heatmap(cov1,cmap="bwr",center =0, ax=axes[0,0], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
+axes[0,0].set_title("cov(Y^c) when T=10")
+sns.heatmap(cov2,cmap="bwr",center=0, ax=axes[0,1], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
+axes[0,1].set_title("cov(Y^c) when T=50")
+sns.heatmap(cov3,cmap="bwr",center=0, ax=axes[0,2], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
+axes[0,2].set_title("cov(Y^c) when T=100")
+
+
+
+sns.heatmap(prec1,cmap="bwr",center=0, ax=axes[1,0], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
+axes[1,0].set_title("prec(Y^p) when T=10")
+sns.heatmap(prec2,cmap="bwr",center=0, ax=axes[1,1], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
+axes[1,1].set_title("prec(Y^p) when T=50")
+sns.heatmap(prec3,cmap="bwr",center=0, ax=axes[1,2], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
+axes[1,2].set_title("prec(Y^p) when T=100")
+plt.show()
+```
+
+From these heatmaps it is easy to see that turning this matrix with continuous coefficient into a binary one, especially when T is varying and we don't know the degree of density nor the value of the non-zeros coefficients, is a complex problem.
+
+We can also see that the usual precision matrix estimator can be unstable when T is low due to the inverse we need to compute. This problem is supposed to be fixed when using specific method for sparse precision matrix that we will use later.
+
+## Choice of the matrix for our survey
+
+Since we are working with the idea to relax sparsity assumptions, we want to have sevaral PSD matrix that represent this.
+
+Simulating semi-definite positive matrix can be really challenging. Especially it is hard to have at the same time zeros coefficients and high value coefficients. For example when working directly with correlation matrix, it is hard to have zeros coefficients but a mean-value of the non-zeros coefficients (that we will call b) that is not too low.
+
+For example on the complete set of matrix that we have we can only obtain certain values for the couple (d,b) for n=50
+%faire un graph avec d par rapport a b pour Slist complete
+
+Dans notre cas on choisie par soucis de temps 20 matrices qui représentent bien ces possibilités:
+
+```{python}
+Slist=pd.read_csv("Sigma_list.csv",index_col=0)
+Slist=Slist["answer"].apply(ast.literal_eval)
+def convert_to_matrix(row):
+    n = 51
+    S=np.array(row).reshape((n, n))
+    return S
+Slist=Slist.apply(convert_to_matrix)
+```
+
+```{python}
+fig, axes = plt.subplots(4, 5, figsize=(20, 15))
+
+# Itérer sur les matrices et les axes pour tracer les heatmaps
+for ax,S in zip(axes.flatten(), Slist):
+    sns.heatmap(method.cov2cor(S),ax=ax,cmap="bwr",vmin=-1,vmax=1)
+plt.show()
+```
+# Results 
+
+For this comparison study, the idea is to start with a list of matrix of correlation, a range of values for the parameter T, and simulate data for each couple (S,T). Then we can compare the method for each correlation matrix S and number of observations T. Here we use a specific list of correlation matrix S, that give us correlation matrix depending on the parameters d and b.
+
+
+## Hard thresholding method parameters: Choice of the threshold, use of Ledoit-Wolf Regularization
+
+We compute the method for each dataset that we have simulated. Here we choose to use it with a wide range of parameters that are the thresholds : with t varying from 0 to 1 by 0.01 step.
+
+```{python }
+results_hard_thresholding_ledoitwolf=pd.read_csv("results/results_hard_thresholding_ledoitwolf.csv")
+results_hard_thresholding=pd.read_csv("results/results_hard_thresholding.csv")
+grouped_mean_ledoitwolf = results_hard_thresholding_ledoitwolf.groupby(["S_num", "T"]).mean().reset_index()
+grouped_mean = results_hard_thresholding.groupby(["S_num", "T"]).mean().reset_index()
+grouped_sd_ledoitwolf = results_hard_thresholding_ledoitwolf.groupby(["S_num", "T"]).std().reset_index()
+grouped_sd = results_hard_thresholding.groupby(["S_num", "T"]).std().reset_index()
+```
+
+```{python}
+def visu_thresh(df,T_value,col,ax1):
+    mean_results=df[df['T'] == T_value]
+    ax=ax1
+    # Boucle pour tracer les courbes
+    colormap = plt.cm.viridis  # Choix de la colormap
+    for index, row in mean_results.iterrows():
+        y_values = row[6:].values  # Récupère les colonnes val1, val2, val3
+        color = colormap(row[col])  # Mappe la valeur de 'b' à une couleur
+        ax.plot(plist, y_values, color=color)
+
+    # Créer un objet ScalarMappable pour la colorbar
+    sm = plt.cm.ScalarMappable(cmap=colormap, norm=plt.Normalize(vmin=mean_results[col].min(), vmax=mean_results[col].max()))
+    sm.set_array([])  # Nécessaire pour la colorbar
+
+    # Ajouter la colorbar à l'axe
+    cbar = plt.colorbar(sm, ax=ax, label=col)
+    
+```
+
+We want to evaluate the impact of the parameters T,b and d on the estimators.
+
+For this we first compare the results of the average depending on the threshold, for several values of T. The color represent the density of the graph (the number of non-zeros coefficients). We want the average to be as high as possible. Since the thresholding consists in doing :
+
+$\hat{A}^c_{i,j}=1 if |cov(Y)|_{i,j}>threshold)$
+
+```{python }
+Tlist=[10,50,100]
+plist=np.linspace(0,1,101)
+fig, axs = plt.subplots(2, 3, figsize=(15, 10))  # 3 lignes, 2 colonnes
+
+# Itérer sur les deux DataFrames
+dfs = [grouped_mean, grouped_mean_ledoitwolf]
+dfnames=["Without Ledoit-Wolf shrinkage","With Ledoit-Wolf Shrinkage"]
+for i, df in enumerate(dfs):
+    # Itérer sur les 3 valeurs de Tlist
+    for j, T_val in enumerate(Tlist):
+        ax = axs[i,j]  # Sélectionner l'axe pour le subplot j-i
+        # Appel de la fonction visu_thresh (en supposant qu'elle soit déjà définie)
+        # Exemple d'appel pour afficher chaque plot pour T_val et le DataFrame actuel
+        visu_thresh(df, T_val, "d",ax1=ax)  # Assurez-vous que visu_thresh accepte l'argument 'ax'
+        
+        # Titre pour chaque subplot
+
+        ax.set_title(f"T= {T_val}  {dfnames[i]}")
+
+
+
+```
+
+```{python}
+fig, axs = plt.subplots(2, 3, figsize=(15, 10))  # 3 lignes, 2 colonnes
+
+# Itérer sur les deux DataFrames
+dfs = [grouped_mean, grouped_mean_ledoitwolf]
+
+for i, df in enumerate(dfs):
+    # Itérer sur les 3 valeurs de Tlist
+    for j, T_val in enumerate(Tlist):
+        ax = axs[i, j]  # Sélectionner l'axe pour le subplot j-i
+        
+        # Appel de la fonction visu_thresh (en supposant qu'elle soit déjà définie)
+        # Exemple d'appel pour afficher chaque plot pour T_val et le DataFrame actuel
+        visu_thresh(df, T_val, "b",ax1=ax)  # Assurez-vous que visu_thresh accepte l'argument 'ax'
+        
+        # Titre pour chaque subplot
+        ax.set_title(f"T= {T_val}  {dfnames[i]}")
+
+```
+
+### resultats generaux selon le seuil et b pour montrer que le seuil optimal change selon la valeur des coefficients non nuls
+### resultats avec ou sans ledoit wolf regularization 
+### resultats selon precision ou covariance (les deux corrigees en correlation)
+## Graphical Lasso 
+
+## Multiple-t-test

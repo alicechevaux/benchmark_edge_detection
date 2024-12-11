@@ -1,8 +1,8 @@
 jupyter
 matplotlib
 numpy
-pandas as pd
-ast
+pandas
 scikit-learn
-pickle
-os
+seaborn
+statsmodels
+rpy2
