@@ -13,7 +13,9 @@ format:
 jupyter: python3
 ---
 
-```{python}
+```{python,message: false,warning: false}
+#| message: false
+#| warning: false
 import pandas as pd
 import ast
 import numpy as np
@@ -36,40 +38,47 @@ from matplotlib.colors import LinearSegmentedColormap
 
 # Introduction
 
-cite **Computo** (@computo) as [@computo]
+The aim of this paper is to present a survey of the differents existing methods to infer a binary graph for a single-subject from fMRI data. We particularly want to emphasize the impact of some strong underlying assumptions that are made sometimes about the degree of density of the graph or the intensity of the correlation. 
 
-This aim of this paper is to present a survey of the differents existing methods to infer a binary graph for a single-subject from fMRI data. We particularly want to emphasize the impact of some strong underlying assumptions that are made sometimes about the degree of density of the graph or the intensity of the correlation.
+To apprehend this problem we focus on some arbitrary choices or hypothesis that are made when using this kind of methods : 
 
-To apprehend this problem we focus on some arbitrary choices or hypothesis that are made when using this kind of methods :
+- First one must choose between working with the an estimator of the covariance matrix or of the precision matrix. These does not carry the same information and does not behave the same way; thus we want to present the impact of this choice on the results.
 
-- First one must choose between working with the an estimator of the covariance matrix or of the precision matrix. These does not carry the same information and does not behave the same way; thus we want to present the impact of this choice on the results 
+- Then it is common to suppose that the graph that we want to infer is sparse. We believe that this may be an unrealistic setting, at least for fMRI data (ref à mettre). We are particularly interested in the robustness of the methods when this hypothesis is relaxed.
 
-- Then it is common to suppose that the graph that we want to infer is sparse. We believe that this may be a unrealistic setting, at least for fMRI data (ref à mettre). We are particularly interested in the robustness of the methods when this hypothesis is relaxed.
-
-- Finally, in edge-detection models, we focus on recovering an adjacency matrix, with 0 if we estim that the correlation is null, or 1 otherwise. We believe that in this case the method must be robust even if the intensity of correlation $\rho_{i,j}$ is low (for example below 0.3). Nonetheless some methods are using some parameters to choose at the beggining that may depend on this value. We will then compare the robustness of the methods depending on the mean values of the non-zeros coefficients.
+- Finally, in edge-detection models, we focus on recovering an adjacency matrix, with 0 if we estim that the correlation is null, or 1 otherwise. We believe that in this case the method must be robust even if the intensity of correlation $\rho_{i,j}$ is low (for example below 0.3). Nonetheless some methods are using some parameters to choose at the beggining that may depend on this value. We will then evaluate the robustness of the methods depending on the mean values of the non-zeros coefficients.
 
 
 For this purpose we propose a set of correlation matrix generated with respect to several parameters : the number of nodes $n$ , the proportion of edges (or degree of density) $d$ and the mean values of the non-zero coefficient $b$. 
 
 # State of the art
 
-Much of this state of the art will be based on the article we mentioned at the beginning, but also some articles that are specialised in sparsity methods and not in the estimation of the correlation matrix. The articles added are mostly from a frequentist setting. %We focus on the methods proposed to transform an estimator of the correlation matrix into a sparse correlation matrix. 
+We focus on two type of methods : 
+
+- the ones using the time-series to infer a sparse matrix representing the connectivity of the brain. This connectivity can be based on an estimator of the correlation or of the precision matrix (do we include the tangent space ?).
+
+- the methods directly use a matrix (usually the frequentist correlation estimator) and then transform it into a sparse or binary one.
 
 
+Here we briefly present the methods as they are used in the state of the art, and we justify why some are not relevant in our comparison. Some of them can easily be used in a slightly different set-up than is the litteratue, we will explicit any changement we made in the next section.
 
 
-- Hard Thresholding : Apply an arbitrary threshold between 0 and 1 to the correlation estimator $\rho_{i,j}$. The choice of the threshold tends to make this method non-robust, in fact the optimal threshold varies depending on some unknown variable such as the sparsity of the graph or the values of $\rho_{i,j}$. This method is the most commonly used in practice because it is easy to interpret and compute. It is the main method in the toolboxes of neuroscientists like in @gretna. %We will use here some known thresholds like (Hero ? revoir biblio Hana)
-    
+- Hard Thresholding : Apply an arbitrary threshold between 0 and 1 to the correlation estimator $\rho_{i,j}$. The choice of the threshold tends to make this method non-robust, in fact the optimal threshold varies depending on some unknown variable such as the sparsity of the graph or the values of $\rho_{i,j}$. This method is the most commonly used in practice because it is easy to interpret and compute. It is the main method in the toolboxes of neuroscientists like in @gretna.
+
 - Proportional threshold: Apply a proportional threshold that guarantees the same proportion of edge for each graph estimated. This is used in practice to compare a group of patients with a group of controls. Some articles, such as @proportional, have warned practitioners about the risks of this method because the total functional connectivity activity become an information that is erased in this procedure. It is not an appropriate comparison for our method because it only works for a known degree of sparsity.
     
 - Multiple t-test: Use a hypothesis test for each pair $(i,j)$ with $H_0^{i,j}: \rho_{i,j}=0$ and $H_1^{i,j}: \rho_{i,j} > 0$. Since we are in a case where we are using the same data for multiple tests, it is common to use a procedure to control the False Discovery Rate (FDR) or the Family-Wise Error Rate (FWER) at a given level $\alpha$, which we will set at $0.05$. In our case, we will prefer a control over the FDR, the most common correction then being the Benjamini-Hochberg procedure, which is easily computable. Some papers such as @cao have used a Bonferonni procedure, but @fdr has shown the advantages of Benjamini-Hochberg for this application.
 
     
-- Graphical Lasso: This model gives us a sparse estimator for the precision matrix. Thus, the correlation matrix is not particularly sparse, so we will not use this method as a comparison for our model. Nevertheless, we know that it is a promising method, but its applications for fMRI data tend to be much more complicated with time-varying graphical models @glasso, which is not appropriate for the data we have here.
+- Graphical Lasso: This model gives us a sparse estimator for the precision matrix. Some of its applications for fMRI data tend to be much more complicated with time-varying graphical models @glasso, which is not appropriate for the data we have here since we simulate iid time-series. We will use the classic graphical lasso, this needs a regularization parameter, this one is usually chosen thanks to a cross-validation.
+
+- Sparse estimation of the covariance matrix @bientibshirani : voir si on l'inclus car long et moyen
+
+- Mixture model threshold : This method is based on the estimator of the precision matrix, whose coefficients are noted $c_{i,j}$. In @bielczyk they assume that the $(c_{i,j})_{i,j}$ are a mixture of two distributions : a null distribution centered on zero (Gaussian or Laplace distribution) and another positive distribution (gamma or inverse gamma distribution). Using an EM algorithm, they estimate the parameters of both distributions. Then, to choose a threshold, they estimate the quantile $q_{1-\alpha}$ of the null distribution. In a way, they construct a hypothesis test on whether a coefficient $\rho_{i,j}$ belongs to the null distribution or not. 
 
 
 Others methods exists yet we choosed not to include them for several reasons :
-Some methods seems promising like fused lasso yet they need the data of several individuals to choose the edges. Others like thresholding based on a mixture models assume that the negative coefficients are irrelevant, yet with our simulation we have negative coefficient that we want to detect, thus these are not usable in this study.
+Some methods seems promising like fused lasso yet they need the data of several individuals to choose the edges. 
 
 # Methodology
 
@@ -92,25 +101,45 @@ The same way, when applying the estimator of the adjacency matrix of the precisi
 We this set-up of simulations and metrics with regards to the same matrix $\Sigma$ and $A$, we will be able to compare methods that estimate a sparse covariance matrix to these that estimate a sparse precision matrix.
 
 
-## Choices of the parameters
 
-# Simulation of data from a correlation matrix
+## Choice of the matrix for our survey
 
-From a positive-definite matrix $\Sigma$, that respect an adjacency matrix A, we can simulate iid data $Y \longrightarrow N(0,\Sigma)$. We choose to work with differents numbers of observations $T \in \{10,50,500\}$. In this setting we will be able to see if the edge-detection methods for the covariance matrix are able to recover the adjacency matrix of $\Sigma$ A.
+Since we are working with the idea to relax sparsity assumptions, we want to have sevaral PSD matrix that represent this.
 
-To compare precision and covariance based methods we wimulate data from $\Sigma$ but also from $\Sigma^{-1}$ :
+Simulating semi-definite positive matrix can be really challenging. Especially it is hard to have at the same time zeros coefficients and high value coefficients. For example when working directly with correlation matrix, it is hard to have zeros coefficients but a mean-value of the non-zeros coefficients (that we will call b) that is not too low.
 
-$Y^c \longrightarrow N(0,\Sigma)$
+For example on the complete set of matrix that we have we can only obtain certain values for the couple (d,b) for n=50
+%faire un graph avec d par rapport a b pour Slist complete
 
-$Y^p \longrightarrow N(0,\Sigma^{-1})$
-
-
-
-For example in our set of data we can take a look at the first definite positive matrix $\Sigma$ and its adjacency matrix A :
-
+Dans notre cas on choisie par soucis de temps 20 matrices qui représentent bien ces possibilités:
 
 ```{python}
-filepath="data/data_S0_T10.pkl"
+Slist=pd.read_csv("Sigma_list.csv",index_col=0)
+Slist=Slist["answer"].apply(ast.literal_eval)
+def convert_to_matrix(row):
+    n = 51
+    S=np.array(row).reshape((n, n))
+    return S
+Slist=Slist.apply(convert_to_matrix)
+```
+
+```{python}
+fig, axes = plt.subplots(4, 5, figsize=(20, 15))
+
+# Itérer sur les matrices et les axes pour tracer les heatmaps
+for ax,S in zip(axes.flatten(), Slist):
+    sns.heatmap(method.cov2cor(S),ax=ax,cmap="bwr",vmin=-1,vmax=1)
+plt.show()
+```
+
+# Toy-example : Exploitation of the differents methods for one graph
+
+## Vizualisation of the data depending on the number of  observations
+
+We will work with one of the previous matrix.
+
+```{python}
+filepath="data/data_S2_T100.pkl"
 with open(filepath, "rb") as file:
     data_dict = pickle.load(file)
 
@@ -125,11 +154,13 @@ axes[0].set_title("Definite positive matrix Sigma")
 sns.heatmap(S!=0,cmap="bwr",vmin=-1,vmax=1,cbar=False, ax=axes[1], xticklabels=False, yticklabels=False, cbar_kws={"shrink": 0.8})
 axes[1].set_title("Adjacency matrix A")
 
-
 plt.show()
 ```
 
-Using the usual estimators of the covariance matrix cov(Y), we can take a look at the estimation we get if we do not use specific edge-detection methods.
+We have simulated for each $T \in {10,50,100}$ , 20 individuals from $Y^c \longrightarrow N(0,\Sigma)$ and 20 from $Y^p \longrightarrow N(0,\Sigma^{-1})$. 
+
+
+Using the usual estimators of the covariance matrix $cov(Y^c)$, we can take a look at the estimation we get if we do not use specific edge-detection methods for one individual for each value of $T$.
 
 We do the same with the data $Y^p$ with the estimator of the precision matrix : $prec(Y^p)=(cov(Y^p))^{-1}$
 
@@ -137,14 +168,39 @@ We can now look at the empirical covariance matrix we get from cov(Y^c) and the 
 
 
 ```{python }
-Y1 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S, size=10)
-Y2 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S, size=50)
-Y3 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S, size=100)
+
+filepath="data/data_S2_T10.pkl"
+with open(filepath, "rb") as file:
+    data_dict = pickle.load(file)
+
+S = data_dict.get('graph')
+data_cov=data_dict.get('data_cov')
+data_prec=data_dict.get('data_prec')
+Y_1=data_prec[1]
+Y1 = data_cov[1]
 
 S_1=np.linalg.inv(S)
-Y_1 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S_1, size=10)
-Y_2 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S_1, size=50)
-Y_3 = multivariate_normal.rvs(mean=np.zeros(S.shape[0]), cov=S_1, size=100)
+
+filepath="data/data_S2_T50.pkl"
+with open(filepath, "rb") as file:
+    data_dict = pickle.load(file)
+
+S = data_dict.get('graph')
+data_cov=data_dict.get('data_cov')
+data_prec=data_dict.get('data_prec')
+Y_2=data_prec[1]
+Y2 = data_cov[1]
+
+filepath="data/data_S2_T100.pkl"
+with open(filepath, "rb") as file:
+    data_dict = pickle.load(file)
+
+S = data_dict.get('graph')
+data_cov=data_dict.get('data_cov')
+data_prec=data_dict.get('data_prec')
+Y_3=data_prec[1]
+Y3 = data_cov[1]
+
 
 cov1, cov2, cov3 = np.cov(Y1.T), np.cov(Y2.T), np.cov(Y3.T)
 prec1 = np.linalg.inv(np.cov(Y_1.T))
@@ -179,38 +235,127 @@ From these heatmaps it is easy to see that turning this matrix with continuous c
 
 We can also see that the usual precision matrix estimator can be unstable when T is low due to the inverse we need to compute. This problem is supposed to be fixed when using specific method for sparse precision matrix that we will use later.
 
-## Choice of the matrix for our survey
+For the rest of this part, we will only use the previous data when $T=100$ this way we will be able to use all the methods, especially with the ones that need a cross-validation. We have : one individual where $S$ is its covariance matrix, and one individual where $S$ is its precision matrix. We want to explore how each method recover the matrix $S$. This way we will be able to use directly the methods that we have used to compute the general results we will exploit in the following part. This may help understand the possible flows of each methods, as we will exploit more explicitly the results we have than in the next section that will only use results that have already been computed for all our data.
 
-Since we are working with the idea to relax sparsity assumptions, we want to have sevaral PSD matrix that represent this.
-
-Simulating semi-definite positive matrix can be really challenging. Especially it is hard to have at the same time zeros coefficients and high value coefficients. For example when working directly with correlation matrix, it is hard to have zeros coefficients but a mean-value of the non-zeros coefficients (that we will call b) that is not too low.
-
-For example on the complete set of matrix that we have we can only obtain certain values for the couple (d,b) for n=50
-%faire un graph avec d par rapport a b pour Slist complete
-
-Dans notre cas on choisie par soucis de temps 20 matrices qui représentent bien ces possibilités:
 
 ```{python}
-Slist=pd.read_csv("Sigma_list.csv",index_col=0)
-Slist=Slist["answer"].apply(ast.literal_eval)
-def convert_to_matrix(row):
-    n = 51
-    S=np.array(row).reshape((n, n))
-    return S
-Slist=Slist.apply(convert_to_matrix)
+filepath="data/data_S2_T100.pkl"
+with open(filepath, "rb") as file:
+    data_dict = pickle.load(file)
+
+S = data_dict.get('graph')
+data_cov=data_dict.get('data_cov')
+data_prec=data_dict.get('data_prec')
+Y_cov=data_cov[1]
+Y_prec=data_prec[1]
 ```
 
-```{python}
-fig, axes = plt.subplots(4, 5, figsize=(20, 15))
 
-# Itérer sur les matrices et les axes pour tracer les heatmaps
-for ax,S in zip(axes.flatten(), Slist):
-    sns.heatmap(method.cov2cor(S),ax=ax,cmap="bwr",vmin=-1,vmax=1)
+## Tangent Based decomposition
+
+Here is a visualization of the tangent based decomposition, using the group mean of the twenty individuals simulating from the same distribution. It has nothing to do with $S$.
+
+```{python}
+g_mean=np.zeros(S.shape)
+for i in range(len(data_cov)):
+    g_mean=method.cov2cor(np.cov(data_cov[i].T))+g_mean
+
+g_mean=g_mean/len(data_cov)
+
+tg=method.tangent_transformation(method.cov2cor(np.cov(data_cov[1].T)),g_mean)
+fig, axes = plt.subplots(1, 4, figsize=(11, 3), constrained_layout=True)
+
+# Heatmap 1
+
+sns.heatmap(tg['whitened'],cmap="bwr",center=0,ax=axes[0], xticklabels=False, yticklabels=False)
+axes[0].set_title("Tangent-based decomposition")
+sns.heatmap(tg['logmat'],cmap="bwr",center=0,ax=axes[1], xticklabels=False, yticklabels=False)
+axes[1].set_title("Tangent-based decomposition with log")
+sns.heatmap(method.cov2cor(np.cov(data_cov[1].T)),cmap="bwr",center=0,ax=axes[2], xticklabels=False, yticklabels=False)
+axes[2].set_title("Cov(Y)")
+sns.heatmap(S,cmap="bwr",center=0,ax=axes[3], xticklabels=False, yticklabels=False)
+axes[3].set_title("S")
 plt.show()
 ```
+
+
+
+## Thresholding method (For covariance or precision matrix)
+
+These method are based on the empirical estimator of $cor(Y)$ or on a transformation of the precision matrix into a correlation one. 
+
+We can use or not Ledoit-Wolf shrinkage since it is supposed to be a more robust estimator of the covariance matrix, since the numbers of observations is quite low to the parameters to estim.
+
+```{python}
+plist=np.linspace(0,0.99,100)
+listresult_lw=method.hardthreshold_list_results(S,Y_cov,plist,ledoitwolf=True)
+listresult=method.hardthreshold_list_results(S,Y_cov,plist,ledoitwolf=False)
+fig, axes = plt.subplots(1, 2, figsize=(7, 3), constrained_layout=True)
+
+axes[0].plot(plist,listresult["average"])
+axes[1].plot(plist,listresult_lw["average"])
+plt.show()
+
+plist=np.linspace(0,0.99,100)
+
+listresult=method.hardthreshold_list_results(S,Y_prec,plist,ledoitwolf=False,inverse=True)
+listresult_lw=method.hardthreshold_list_results(S,Y_prec,plist,ledoitwolf=True,inverse=True)
+fig, axes = plt.subplots(1, 2, figsize=(7, 3), constrained_layout=True)
+
+axes[0].plot(plist,listresult["average"])
+axes[1].plot(plist,listresult_lw["average"])
+plt.show()
+
+```
+
+
+## glasso (for precision )
+
+
+```{python}
+plist=np.linspace(0.1,2,20)
+listresult=method.glasso_list_results(S,Y_cov,plist)
+fig, axes = plt.subplots(1, 2, figsize=(7, 3), constrained_layout=True)
+
+axes[0].plot(listresult['plist'],listresult['average'])
+plist=np.linspace(11500,12000,20)
+listresult=method.glasso_list_results(S,Y_prec,plist,Stype="precision")
+axes[1].plot(listresult['plist'],listresult['average'])
+plt.show()
+opt_cov=method.glasso_cv_results(S,Y_cov,Stype="covariance")
+opt_prec=method.glasso_cv_results(S,Y_prec,Stype="precision")
+```
+
+donc mieux pour prec mais limiter car la cv est difficile avec 100 observations
+
+## spcov (glasso for covariance matrix) tangent based ?
+
+This takes a few minutes to compute and the results seems not worth it.
+
+```{python}
+#prend 7-8 min et n'a rien mis à zero
+#spcov1=method.spcov_cv_results(S,Y_cov.T,Stype="covariance") 
+#spcov2=method.spcov_cv_results(S_1,Y_prec,Stype="precision")
+```
+
+## Multiple t-test 
+
+```{python}
+res=method.multiplecortest_list_results(S,Y_cov)
+resprec=method.multiplecortest_list_results(S,Y_prec)
+
+table = pd.DataFrame([res['average'],resprec["average"]], columns=res['plist'],index=["covariance","precision"])
+table
+
+
+```
+
+Pas fait pour la matrice de precision car detecte mal les correlation partielle. BH moins conservateur que bonferonni
+
 # Results 
 
 For this comparison study, the idea is to start with a list of matrix of correlation, a range of values for the parameter T, and simulate data for each couple (S,T). Then we can compare the method for each correlation matrix S and number of observations T. Here we use a specific list of correlation matrix S, that give us correlation matrix depending on the parameters d and b.
+
 
 
 ## Hard thresholding method parameters: Choice of the threshold, use of Ledoit-Wolf Regularization

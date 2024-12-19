@@ -32,20 +32,21 @@ def glasso_cv_results(S,Y,results="measure_only",Stype="precision"):
         return {"Stype":Stype,"g":g,"FP":FP,"FN":FN,"TN":TN,"TP":TP,"average":TN+TP,"lambda":model.alpha_}
 
 
-
-def glasso(Y,parameter):
+def glasso(Y,parameter,Stype="covariance"):
     alpha = parameter  # Coefficient de régularisation (contrôle la sparsité)
     model = GraphicalLasso(alpha=alpha, max_iter=100, tol=1e-4)
     model.fit(Y)
 
-    # Résultats
-    precision_matrix = model.precision_  # Matrice de précision (inverse de la covariance)
-    return precision_matrix!=0
+    if Stype=="precision":
+        g=model.precision_
+    else:
+        g=model.covariance_
+    return g!=0
 
 
 
-def glasso_list_results(S,Y,list_parameters,results="measure_only"):
-    g_list = [glasso(Y, alpha) for alpha in list_parameters]
+def glasso_list_results(S,Y,list_parameters,results="measure_only",Stype="covariance"):
+    g_list = [glasso(Y, alpha,Stype=Stype) for alpha in list_parameters]
     FP=np.zeros(len(g_list))
     FN=np.zeros(len(g_list))
     TP=np.zeros(len(g_list))
@@ -62,20 +63,28 @@ def glasso_list_results(S,Y,list_parameters,results="measure_only"):
     else:
         return {"plist":list_parameters,"g_list":g_list,"FP":FP,"FN":FN,"TN":TN,"TP":TP,"average":TN+TP}
 
-def hardthreshold(Y,parameter,ledoitwolf=False):
+def hardthreshold(Y,parameter,ledoitwolf=False,inverse=False):
     if ledoitwolf==True:
         Slw=LedoitWolf().fit(Y)
-        cor_mat=cov2cor(Slw.covariance_)
+        if inverse==False:
+            cor_mat=cov2cor(Slw.covariance_)
+        else:
+            cor_mat=cov2cor(Slw.precision_)
     else:
-        cor_mat=cov2cor(np.cov(Y.T))
+        cov_mat=np.cov(Y.T)
+        if inverse==True:
+            prec_mat=np.linalg.inv(cov_mat)
+            cor_mat=cov2cor(prec_mat)
+        else:
+            cor_mat=cov2cor(cov_mat)
     thr=parameter
 
-    return cor_mat>thr
+    return abs(cor_mat)>thr
 
 
 
-def hardthreshold_list_results(S,Y,list_parameters,results="measure_only",ledoitwolf=False):
-    g_list = [hardthreshold(Y, thr,ledoitwolf=ledoitwolf) for thr in list_parameters]
+def hardthreshold_list_results(S,Y,list_parameters,results="measure_only",ledoitwolf=False,inverse=False):
+    g_list = [hardthreshold(Y, thr,ledoitwolf=ledoitwolf,inverse=inverse) for thr in list_parameters]
     FP=np.zeros(len(g_list))
     FN=np.zeros(len(g_list))
     TP=np.zeros(len(g_list))
@@ -215,4 +224,13 @@ def spcov_cv_results(S,Y,results="measure_only",Stype="precision",nfolds=5):
         return {"Stype":Stype,"g":g,"FP":FP,"FN":FN,"TN":TN,"TP":TP,"average":TN+TP}
 
 
-
+def tangent_transformation(S,Sigma_group):
+    eigenvalues, eigenvectors = np.linalg.eigh(Sigma_group)
+    D = np.diag(eigenvalues**(-1/2))
+    V = eigenvectors
+    whitened=V@D@V.T@S@V@D@V.T
+    eigenvalues, eigenvectors = np.linalg.eigh(whitened)
+    wD=np.diag(np.log(eigenvalues**(-1/2)))
+    wU=eigenvectors
+    logmat=wU@wD@wU.T
+    return {"logmat":logmat,"whitened":whitened}
